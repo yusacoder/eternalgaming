@@ -1,625 +1,118 @@
-/* ============================================
-   MANGA MOE — SCRIPT.JS
-   ============================================ */
+// Canvas Particle Animation
+document.addEventListener('DOMContentLoaded', () => {
+  const canvas = document.getElementById('particles-canvas');
+  if (canvas) {
+    const ctx = canvas.getContext('2d');
+    let width = (canvas.width = window.innerWidth);
+    let height = (canvas.height = window.innerHeight);
 
-// ── STATE ──
-const STATE = {
-  news: [],
-  currentSlide: 0,
-  sliderInterval: null,
-  currentPage: 1,
-  itemsPerPage: 8,
-};
+    window.addEventListener('resize', () => {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    });
 
-// ── FETCH JSON ──
-async function fetchNews() {
-  try {
-    const prefix = window.location.pathname.includes('/admin/') ? '../' : '';
-    const res = await fetch(prefix + 'data.json');
-    if (!res.ok) throw new Error('Fetch failed');
-    const data = await res.json();
-    // En yüksek ID en üste gelecek şekilde sırala
-    STATE.news = data.sort((a, b) => b.id - a.id);
-    return STATE.news;
-  } catch (err) {
-    console.error('JSON fetch hatası:', err);
-    return [];
-  }
-}
+    const particles = [];
+    const particleCount = Math.floor(width / 20);
 
-// ── FORMAT DATE ──
-function formatDate(dateStr) {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric' });
-}
+    class Particle {
+      constructor() {
+        this.reset();
+      }
 
-// ── HERO SLIDER ──
-function initSlider(news) {
-  const slider = document.getElementById('heroSlider');
-  if (!slider) return;
+      reset() {
+        this.x = Math.random() * width;
+        this.y = Math.random() * height;
+        this.size = Math.random() * 2 + 0.5;
+        this.speedX = (Math.random() - 0.5) * 0.4;
+        this.speedY = (Math.random() - 0.5) * 0.4;
+        this.opacity = Math.random() * 0.5 + 0.1;
+      }
 
-  const slidesData = news.slice(0, 5);
-  const slidesWrapper = document.getElementById('slidesWrapper');
-  const dotsWrap = document.getElementById('sliderDots');
-  const btnPrev  = document.getElementById('btnPrev');
-  const btnNext  = document.getElementById('btnNext');
-  const bar      = document.getElementById('progressBar');
-  const cCurrent = document.getElementById('countCurrent');
-  const cTotal   = document.getElementById('countTotal');
+      update() {
+        this.x += this.speedX;
+        this.y += this.speedY;
 
-  if (!slidesWrapper || !dotsWrap) return;
+        if (this.x < 0 || this.x > width || this.y < 0 || this.y > height) {
+          this.reset();
+        }
+      }
 
-  const INTERVAL = 5500; // ms per slide
-  let current = 0;
-  let timer = null;
-  let paused = false;
-  let startTime, elapsed = 0;
-
-  cTotal.textContent = slidesData.length;
-
-  // Render slides
-  slidesWrapper.innerHTML = slidesData.map((item, i) => {
-    let titleHtml = item.title;
-    if (item.title.includes(':')) {
-      const parts = item.title.split(':');
-      titleHtml = `${parts[0]}:<br><span>${parts.slice(1).join(':')}</span>`;
+      draw() {
+        ctx.fillStyle = `rgba(212, 175, 55, ${this.opacity})`;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
-    return `
-      <div class="slide ${i === 0 ? 'active' : ''}" data-index="${i}">
-        <div class="slide-bg" style="background-image: url('${item.image}')"></div>
-        <div class="slide-overlay"></div>
-        <div class="ep-badge">✦ Haber</div>
-        <div class="slide-content">
-          <div class="slide-tag"><span class="dot"></span>Öne Çıkan</div>
-          <h2 class="slide-title">${titleHtml}</h2>
-          <p class="slide-desc">${item.desc}</p>
-          <div class="slide-actions">
-            <a href="haber-detay.html?id=${item.id}" class="btn-slide-primary">▶ Haberi Oku</a>
-            <a href="haberler.html" class="btn-slide-ghost">Tümü</a>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join('');
+    for (let i = 0; i < particleCount; i++) {
+      particles.push(new Particle());
+    }
 
-  // Build dots
-  dotsWrap.innerHTML = '';
-  slidesData.forEach((_, i) => {
-    const d = document.createElement('button');
-    d.className = 'dot-btn' + (i === 0 ? ' active' : '');
-    d.setAttribute('aria-label', `Slide ${i + 1}`);
-    d.addEventListener('click', () => goTo(i));
-    dotsWrap.appendChild(d);
-  });
+    function animate() {
+      ctx.clearRect(0, 0, width, height);
+      particles.forEach((p) => {
+        p.update();
+        p.draw();
+      });
+      requestAnimationFrame(animate);
+    }
 
-  const slides = Array.from(slider.querySelectorAll('.slide'));
-  function getDots() { return Array.from(dotsWrap.querySelectorAll('.dot-btn')); }
-
-  function goTo(next) {
-    if (next === current || !slides[next]) return;
-    const prev = current;
-
-    slides[prev].classList.remove('active');
-    slides[prev].classList.add('exit');
-    setTimeout(() => slides[prev].classList.remove('exit'), 700);
-
-    slides[next].classList.add('active');
-    current = next;
-
-    getDots().forEach((d, i) => d.classList.toggle('active', i === current));
-    if (cCurrent) cCurrent.textContent = current + 1;
-
-    resetProgress();
-    startProgress();
+    animate();
   }
 
-  function nextSlide() { goTo((current + 1) % slides.length); }
-  function prevSlide() { goTo((current - 1 + slides.length) % slides.length); }
-
-  // Progress logic
-  function startProgress() {
-    if (!bar) return;
-    startTime = performance.now() - elapsed;
-    bar.style.transition = `width ${(INTERVAL - elapsed) / 1000}s linear`;
-    bar.style.width = '100%';
-
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      elapsed = 0;
-      nextSlide();
-    }, INTERVAL - elapsed);
-  }
-
-  function pauseProgress() {
-    if (!bar) return;
-    elapsed = performance.now() - startTime;
-    clearTimeout(timer);
-    const pct = Math.min((elapsed / INTERVAL) * 100, 100);
-    bar.style.transition = 'none';
-    bar.style.width = pct + '%';
-  }
-
-  function resetProgress() {
-    if (!bar) return;
-    elapsed = 0;
-    clearTimeout(timer);
-    bar.style.transition = 'none';
-    bar.style.width = '0%';
-  }
-
-  // Controls
-  btnNext?.addEventListener('click', () => { resetProgress(); elapsed = 0; nextSlide(); });
-  btnPrev?.addEventListener('click', () => { resetProgress(); elapsed = 0; prevSlide(); });
-
-  // Pause on hover
-  slider.addEventListener('mouseenter', () => {
-    if (!paused) { paused = true; pauseProgress(); slider.classList.add('paused'); }
-  });
-  slider.addEventListener('mouseleave', () => {
-    if (paused) { paused = false; slider.classList.remove('paused'); startProgress(); }
-  });
-
-  // Touch swipe
-  let touchStartX = 0;
-  slider.addEventListener('touchstart', e => {
-    touchStartX = e.touches[0].clientX;
-    paused = true; pauseProgress();
-  }, { passive: true });
-  slider.addEventListener('touchend', e => {
-    const dx = e.changedTouches[0].clientX - touchStartX;
-    paused = false;
-    if (Math.abs(dx) > 40) {
-      elapsed = 0;
-      dx < 0 ? nextSlide() : prevSlide();
+  // Navbar Scroll Effect
+  const navbar = document.getElementById('navbar');
+  window.addEventListener('scroll', () => {
+    if (window.scrollY > 50) {
+      navbar.classList.add('scrolled');
     } else {
-      startProgress();
+      navbar.classList.remove('scrolled');
     }
-    slider.classList.remove('paused');
-  }, { passive: true });
-
-  // Keyboard
-  document.addEventListener('keydown', e => {
-    // Only if slider is in viewport/active page
-    if (!document.getElementById('heroSlider')) return;
-    if (e.key === 'ArrowRight') { elapsed = 0; nextSlide(); }
-    if (e.key === 'ArrowLeft')  { elapsed = 0; prevSlide(); }
   });
 
-  startProgress();
-}
+  // Mobile Navigation Toggle
+  const mobileToggle = document.getElementById('mobileToggle');
+  const navLinks = document.getElementById('navLinks');
 
-// ── NEWS RENDER (haberler.html) ──
-function renderNews(news, page = 1) {
-  const grid = document.getElementById('news-grid');
-  if (!grid) return;
+  if (mobileToggle && navLinks) {
+    mobileToggle.addEventListener('click', () => {
+      navLinks.classList.toggle('active');
+    });
 
-  const start = (page - 1) * STATE.itemsPerPage;
-  const end = start + STATE.itemsPerPage;
-  const pageItems = news.slice(start, end);
+    // Close menu when clicking on a link
+    document.querySelectorAll('.nav-link').forEach((link) => {
+      link.addEventListener('click', () => {
+        navLinks.classList.remove('active');
+      });
+    });
+  }
 
-  grid.innerHTML = '';
+  // Modal Functionality
+  const modalOverlay = document.getElementById('modalOverlay');
+  const modalClose = document.getElementById('modalClose');
+  const modalTriggers = document.querySelectorAll('.modal-trigger, .modal-trigger-link');
 
-  pageItems.forEach((item, i) => {
-    const card = document.createElement('article');
-    card.className = 'news-card animate-in';
-    card.style.animationDelay = `${i * 0.07}s`;
-    card.style.opacity = '0';
-    card.innerHTML = `
-      <div class="card-image">
-        <img src="${item.image}" alt="${item.title}" loading="lazy">
-        <div class="card-image-overlay"></div>
-        <div class="card-date-badge">${formatDate(item.date)}</div>
-      </div>
-      <div class="card-body">
-        <h3 class="card-title">${item.title}</h3>
-        <p class="card-desc">${item.desc}</p>
-        <div class="card-footer">
-          <span class="card-date">
-            <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-            </svg>
-            ${formatDate(item.date)}
-          </span>
-          <a href="haber-detay.html?id=${item.id}" class="btn-card">Detay Gör</a>
-        </div>
-      </div>
-    `;
+  modalTriggers.forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      if (btn.classList.contains('modal-trigger-link')) {
+        e.preventDefault();
+      }
+      modalOverlay.classList.add('active');
+    });
+  });
 
-    // Karta tıklanınca detay sayfasına git
-    card.addEventListener('click', (e) => {
-      if (!e.target.closest('.btn-card')) {
-        window.location.href = `haber-detay.html?id=${item.id}`;
+  if (modalClose) {
+    modalClose.addEventListener('click', () => {
+      modalOverlay.classList.remove('active');
+    });
+  }
+
+  if (modalOverlay) {
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) {
+        modalOverlay.classList.remove('active');
       }
     });
-
-    grid.appendChild(card);
-  });
-
-  // Update counter
-  const countEl = document.getElementById('news-count');
-  if (countEl) {
-    countEl.innerHTML = `<strong>${news.length}</strong> haber`;
-  }
-
-  renderPagination(news.length, page);
-}
-
-// ── PAGINATION ──
-function renderPagination(totalItems, currentPage) {
-  const wrapper = document.getElementById('pagination');
-  if (!wrapper) return;
-
-  const totalPages = Math.ceil(totalItems / STATE.itemsPerPage);
-  if (totalPages <= 1) { wrapper.innerHTML = ''; return; }
-
-  let html = '';
-
-  html += `
-    <button class="page-btn" id="prev-page" ${currentPage === 1 ? 'disabled' : ''}>
-      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-      </svg>
-    </button>
-  `;
-
-  for (let i = 1; i <= totalPages; i++) {
-    if (
-      i === 1 || i === totalPages ||
-      (i >= currentPage - 1 && i <= currentPage + 1)
-    ) {
-      html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`;
-    } else if (i === currentPage - 2 || i === currentPage + 2) {
-      html += `<span style="color: var(--white-muted); padding: 0 4px; line-height: 40px;">···</span>`;
-    }
-  }
-
-  html += `
-    <button class="page-btn" id="next-page" ${currentPage === totalPages ? 'disabled' : ''}>
-      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-      </svg>
-    </button>
-  `;
-
-  wrapper.innerHTML = html;
-
-  wrapper.querySelectorAll('.page-btn[data-page]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const page = parseInt(btn.dataset.page);
-      STATE.currentPage = page;
-      renderNews(STATE.news, page);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
-  });
-
-  document.getElementById('prev-page')?.addEventListener('click', () => {
-    if (STATE.currentPage > 1) {
-      STATE.currentPage--;
-      renderNews(STATE.news, STATE.currentPage);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  });
-
-  document.getElementById('next-page')?.addEventListener('click', () => {
-    const totalPages = Math.ceil(STATE.news.length / STATE.itemsPerPage);
-    if (STATE.currentPage < totalPages) {
-      STATE.currentPage++;
-      renderNews(STATE.news, STATE.currentPage);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  });
-}
-
-// ── SKELETON LOADING ──
-function showSkeleton() {
-  const grid = document.getElementById('news-grid');
-  if (!grid) return;
-  grid.innerHTML = Array(8).fill('').map(() => `
-    <div class="skeleton-card">
-      <div class="skeleton skeleton-img"></div>
-      <div class="skeleton-body">
-        <div class="skeleton skeleton-title"></div>
-        <div class="skeleton skeleton-line"></div>
-        <div class="skeleton skeleton-line"></div>
-        <div class="skeleton skeleton-line"></div>
-      </div>
-    </div>
-  `).join('');
-}
-
-// ── DETAIL PAGE ──
-async function initDetailPage() {
-  const detailSection = document.getElementById('detail-section');
-  if (!detailSection) return;
-
-  const params = new URLSearchParams(window.location.search);
-  const id = parseInt(params.get('id'));
-
-  if (!id) {
-    detailSection.innerHTML = '<div class="detail-error"><p>Haber bulunamadı.</p><a href="haberler.html" class="btn-primary" style="display:inline-flex;margin-top:16px;">Haberlere Dön</a></div>';
-    return;
-  }
-
-  try {
-    const res = await fetch('data.json');
-    const data = await res.json();
-    const item = data.find(n => n.id === id);
-
-    if (!item) {
-      detailSection.innerHTML = '<div class="detail-error"><p>Haber bulunamadı.</p><a href="haberler.html" class="btn-primary" style="display:inline-flex;margin-top:16px;">Haberlere Dön</a></div>';
-      return;
-    }
-
-    // Update page title
-    document.title = `${item.title} — Manga Moe`;
-
-    // Önceki ve sonraki haber
-    const sorted = data.sort((a, b) => b.id - a.id);
-    const currentIndex = sorted.findIndex(n => n.id === id);
-    const prevItem = sorted[currentIndex + 1] || null;
-    const nextItem = sorted[currentIndex - 1] || null;
-
-    // İlgili haberler (aynı tarih yakını, farklı ID)
-    const related = sorted.filter(n => n.id !== id).slice(0, 3);
-
-    detailSection.innerHTML = `
-      <div class="detail-hero">
-        <div class="detail-hero-img" style="background-image: url('${item.image}')">
-          <div class="detail-hero-overlay"></div>
-        </div>
-        <div class="detail-hero-content">
-          <div class="container">
-            <div class="detail-breadcrumb">
-              <a href="index.html">Ana Sayfa</a>
-              <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-              <a href="haberler.html">Haberler</a>
-              <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-              <span>${item.title.substring(0, 30)}...</span>
-            </div>
-            <div class="detail-badge">✦ Haber</div>
-            <h1 class="detail-title">${item.title}</h1>
-            <div class="detail-meta">
-              <span class="detail-date">
-                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                </svg>
-                ${formatDate(item.date)}
-              </span>
-              <span class="detail-id">ID: #${item.id}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="container">
-        <div class="detail-layout">
-          <article class="detail-article">
-            <div class="detail-desc-box">
-              <p class="detail-desc">${item.desc}</p>
-            </div>
-            <div class="detail-content">
-              <p>${item.content}</p>
-            </div>
-
-            <div class="detail-nav">
-              ${prevItem ? `
-                <a href="haber-detay.html?id=${prevItem.id}" class="detail-nav-btn detail-nav-prev">
-                  <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-                  </svg>
-                  <div>
-                    <span class="detail-nav-label">Önceki Haber</span>
-                    <span class="detail-nav-title">${prevItem.title.substring(0, 50)}${prevItem.title.length > 50 ? '...' : ''}</span>
-                  </div>
-                </a>
-              ` : '<div></div>'}
-              ${nextItem ? `
-                <a href="haber-detay.html?id=${nextItem.id}" class="detail-nav-btn detail-nav-next">
-                  <div>
-                    <span class="detail-nav-label">Sonraki Haber</span>
-                    <span class="detail-nav-title">${nextItem.title.substring(0, 50)}${nextItem.title.length > 50 ? '...' : ''}</span>
-                  </div>
-                  <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                  </svg>
-                </a>
-              ` : '<div></div>'}
-            </div>
-          </article>
-
-          <aside class="detail-sidebar">
-            <div class="sidebar-section">
-              <div class="sidebar-label">İlgili Haberler</div>
-              <div class="sidebar-list">
-                ${related.map(r => `
-                  <a href="haber-detay.html?id=${r.id}" class="sidebar-item">
-                    <img src="${r.image}" alt="${r.title}" loading="lazy">
-                    <div class="sidebar-item-info">
-                      <p class="sidebar-item-title">${r.title}</p>
-                      <span class="sidebar-item-date">${formatDate(r.date)}</span>
-                    </div>
-                  </a>
-                `).join('')}
-              </div>
-            </div>
-            <div class="sidebar-section">
-              <a href="haberler.html" class="btn-all-news">
-                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"/>
-                </svg>
-                Tüm Haberleri Gör
-              </a>
-            </div>
-          </aside>
-        </div>
-      </div>
-    `;
-  } catch (err) {
-    console.error('Detail fetch error:', err);
-    detailSection.innerHTML = '<div class="detail-error"><p>Haber yüklenirken hata oluştu.</p></div>';
-  }
-}
-
-// ── MODAL ──
-function initModal() {
-  const overlay = document.getElementById('modal-overlay');
-  const triggers = document.querySelectorAll('.modal-trigger');
-  const closeBtn = document.getElementById('modal-close');
-  const closeFooter = document.getElementById('modal-close-footer');
-
-  if (!overlay) return;
-
-  function openModal() {
-    overlay.classList.add('open');
-    document.body.style.overflow = 'hidden';
-  }
-  function closeModal() {
-    overlay.classList.remove('open');
-    document.body.style.overflow = '';
-  }
-
-  triggers.forEach(btn => btn.addEventListener('click', openModal));
-  closeBtn?.addEventListener('click', closeModal);
-  closeFooter?.addEventListener('click', closeModal);
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) closeModal();
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeModal();
-  });
-}
-
-// ── DRAWER ──
-function initDrawer() {
-  const hamburger = document.getElementById('hamburger');
-  const drawer = document.getElementById('drawer');
-  const overlay = document.getElementById('drawer-overlay');
-  const closeBtn = document.getElementById('drawer-close');
-
-  if (!hamburger || !drawer) return;
-
-  function openDrawer() {
-    drawer.classList.add('open');
-    overlay?.classList.add('open');
-    hamburger.classList.add('active');
-    document.body.style.overflow = 'hidden';
-  }
-  function closeDrawer() {
-    drawer.classList.remove('open');
-    overlay?.classList.remove('open');
-    hamburger.classList.remove('active');
-    document.body.style.overflow = '';
-  }
-
-  hamburger.addEventListener('click', openDrawer);
-  overlay?.addEventListener('click', closeDrawer);
-  closeBtn?.addEventListener('click', closeDrawer);
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeDrawer();
-  });
-}
-
-// ── GLOBAL SEARCH (All Pages) ──
-function initGlobalSearch() {
-  const searchInput = document.getElementById('global-search-input');
-  const dropdown = document.getElementById('search-dropdown');
-  const resultsList = document.getElementById('search-results-list');
-
-  if (!searchInput || !dropdown || !resultsList) return;
-
-  function showDropdown() {
-    dropdown.classList.add('active');
-  }
-
-  function hideDropdown() {
-    dropdown.classList.remove('active');
-  }
-
-  function performSearch(query, isEnter = false) {
-    const q = query.toLowerCase().trim();
-    const isMainPage = window.location.pathname.endsWith('index.html') || window.location.pathname.endsWith('/') || window.location.pathname === '' || window.location.pathname.includes('index.html');
-
-    if (isEnter && isMainPage) {
-      resultsList.innerHTML = '<div class="search-no-results">Henüz manga eklenmedi.</div>';
-      showDropdown();
-      return;
-    }
-
-    if (!q) {
-      resultsList.innerHTML = '<div class="search-no-results">Aramaya başlayın...</div>';
-      showDropdown();
-      return;
-    }
-
-    const filtered = STATE.news.filter(n =>
-      n.title.toLowerCase().includes(q) ||
-      n.desc.toLowerCase().includes(q) ||
-      (n.content && n.content.toLowerCase().includes(q))
-    ).slice(0, 6);
-
-    if (filtered.length > 0) {
-      resultsList.innerHTML = filtered.map(item => {
-        const prefix = window.location.pathname.includes('/admin/') ? '../' : '';
-        return `
-          <a href="${prefix}haber-detay.html?id=${item.id}" class="search-result-item">
-            <img src="${prefix}${item.image}" class="search-result-img" alt="${item.title}">
-            <div class="search-result-info">
-              <div class="search-result-title">${item.title}</div>
-              <div class="search-result-date">${formatDate(item.date)}</div>
-            </div>
-          </a>
-        `;
-      }).join('');
-    } else {
-      resultsList.innerHTML = '<div class="search-no-results">Sonuç bulunamadı.</div>';
-    }
-    showDropdown();
-  }
-
-  searchInput.addEventListener('focus', (e) => {
-    performSearch(e.target.value);
-  });
-
-  searchInput.addEventListener('input', (e) => {
-    performSearch(e.target.value);
-  });
-
-  searchInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      performSearch(searchInput.value, true);
-    }
-  });
-
-  // Click outside to close
-  document.addEventListener('click', (e) => {
-    if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
-      hideDropdown();
-    }
-  });
-}
-
-// ── INIT ──
-document.addEventListener('DOMContentLoaded', async () => {
-  initModal();
-  initDrawer();
-  initGlobalSearch();
-
-  const isNewsPage = !!document.getElementById('news-grid');
-  const isHomePage = !!document.getElementById('heroSlider');
-  const isDetailPage = !!document.getElementById('detail-section');
-
-  if (isDetailPage) {
-    await initDetailPage();
-    return;
-  }
-
-  if (isNewsPage) showSkeleton();
-
-  const news = await fetchNews();
-
-  if (isHomePage) initSlider(news);
-  if (isNewsPage) {
-    renderNews(news, 1);
   }
 });
